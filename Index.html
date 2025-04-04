@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Perceptron Explorer</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+        .card {
+            background-color: #fff;
+            margin-bottom: 30px;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden; /* Prevents box shadow clipping */
+        }
+        h1, h2, h3 {
+            color: #005f73;
+            margin-top: 0;
+            border-bottom: 2px solid #e0f7fa;
+            padding-bottom: 10px;
+        }
+        h1 { text-align: center; border-bottom: none; font-size: 2.5em; color: #0a9396; }
+
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap; 
+            gap: 25px;
+            align-items: flex-start; 
+        }
+        .controls {
+            flex: 1; 
+            min-width: 320px;
+            padding-right: 20px; 
+        }
+        .controls label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #0077b6;
+        }
+        .controls input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+            cursor: pointer;
+            accent-color: #0096c7; 
+        }
+        .controls span {
+            display: inline-block;
+            min-width: 40px; 
+            margin-left: 10px;
+            font-style: italic;
+            color: #555;
+            background-color: #e9ecef;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .controls button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+            margin-top: 15px;
+        }
+        .controls button:hover {
+            background-color: #0056b3;
+        }
+
+        .plot-container {
+            flex: 2; 
+            min-width: 400px; 
+            height: 450px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff; 
+        }
+        .small-plot-container {
+             width: 100%; 
+             max-width: 350px; 
+             height: 250px;
+             border: 1px solid #ccc;
+             border-radius: 5px;
+             margin: 10px auto; 
+        }
+
+        .explanation {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e0f7fa;
+            border-radius: 8px;
+            border-left: 5px solid #0077b6;
+            font-size: 0.95em;
+            line-height: 1.6;
+         }
+         .explanation h2, .explanation h3 { border-bottom: none; padding-bottom: 0; margin-bottom: 10px; }
+         .explanation p { margin-bottom: 10px; }
+         .explanation code {
+             background-color: #d1ecf1;
+             padding: 2px 5px;
+             border-radius: 3px;
+             font-family: monospace;
+         }
+
+        .comparison-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            text-align: center;
+        }
+        .comparison-item {
+             flex: 1;
+             min-width: 250px;
+        }
+
+        /* MLP Animation Styles */
+        #mlp-visualization-area {
+            position: relative;
+            width: 90%;
+            max-width: 500px;
+            height: 300px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            margin: 20px auto;
+            background-color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #mlp-diagram-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        #mlp-solution-plot-container { 
+             width: 100%;
+             height: 100%;
+        }
+
+        .mlp-neuron {
+            position: absolute;
+            width: 40px; 
+            height: 40px;
+            border-radius: 50%;
+            background-color: #e9ecef;
+            border: 2px solid #adb5bd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8em;
+            font-weight: bold;
+            transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+            z-index: 2;
+        }
+        .mlp-neuron.active {
+             background-color: #0096c7;
+             border-color: #005f73;
+             color: white;
+             transform: scale(1.1);
+        }
+
+        .mlp-arrow {
+            position: absolute;
+            background-color: #adb5bd;
+            height: 3px; /* Thicker */
+            transform-origin: left center;
+            transition: background-color 0.3s ease, height 0.3s ease;
+            z-index: 1;
+        }
+         .mlp-arrow.active {
+            background-color: #0077b6;
+            height: 4px; 
+        }
+
+        /* Make plots responsive */
+         @media (max-width: 768px) {
+            .flex-container {
+                flex-direction: column;
+                align-items: center; 
+            }
+            .controls {
+                 padding-right: 0;
+                 width: 90%; 
+            }
+            .plot-container {
+                width: 90%;
+                height: 400px;
+            }
+            .comparison-container {
+                flex-direction: column;
+            }
+             #mlp-visualization-area {
+                 height: 350px;
+             }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Perceptron Explorer</h1>
+
+        <div class="card">
+            <h2>Decision Boundary & Perceptron Basics</h2>
+            <div class="flex-container">
+                <div class="controls">
+                    <h3>Adjust Weights & Bias</h3>
+                    <label for="weight1">Weight 1 (w1):</label>
+                    <input type="range" id="weight1" min="-5" max="5" value="1" step="0.1"> <span id="weight1-value">1.0</span><br><br>
+                    <label for="weight2">Weight 2 (w2):</label>
+                    <input type="range" id="weight2" min="-5" max="5" value="1" step="0.1"> <span id="weight2-value">1.0</span><br><br>
+                    <label for="bias">Bias (b):</label>
+                    <input type="range" id="bias" min="-5" max="5" value="-0.5" step="0.1"> <span id="bias-value">-0.5</span><br><br>
+                    <div class="explanation">
+                         <p>A single-layer perceptron uses weights (<code>w1</code>, <code>w2</code>) and a bias (<code>b</code>) to classify inputs.</p>
+                         <p>Output = 1 if (<code>w1*x1 + w2*x2 + b > 0</code>), else 0.</p>
+                         <p>The line where <code>w1*x1 + w2*x2 + b = 0</code> is the <strong>decision boundary</strong>. Adjust the sliders to see how it changes!</p>
+                         <p>This example uses data points resembling the <strong>AND</strong> gate (only [1, 1] is class 1).</p>
+                    </div>
+                </div>
+                <div class="plot-container" id="decision-boundary-plot"></div>
+            </div>
+        </div>
+
+        <div class="card">
+             <h2>Error Surface & Learning</h2>
+             <div class="flex-container">
+                 <div class="controls">
+                     <h3>Explore the Error Landscape (AND Gate)</h3>
+                     <label for="error-bias">Bias (b) for Error Calculation:</label>
+                     <input type="range" id="error-bias" min="-5" max="5" value="-1.5" step="0.1"> <span id="error-bias-value">-1.5</span><br><br>
+                     <div class="explanation">
+                          <p>This surface shows the <strong>error</strong> (Mean Squared Error) for different weight combinations (<code>w1</code>, <code>w2</code>) given a fixed bias, using the AND gate data.</p>
+                          <p>Learning algorithms (like Gradient Descent) try to find the lowest point (minimum error) on this surface by adjusting weights and bias.</p>
+                          <p>Change the bias slider to see how the optimal weight region shifts.</p>
+                     </div>
+                 </div>
+                 <div class="plot-container" id="error-surface-plot"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Linear Separability: AND vs. XOR</h2>
+             <div class="comparison-container">
+                <div class="comparison-item">
+                    <h3>Linearly Separable (e.g., AND)</h3>
+                    <div class="small-plot-container" id="and-plot"></div>
+                    <p>A single straight line <strong>can</strong> perfectly separate the classes (e.g., green from gray).</p>
+                </div>
+                <div class="comparison-item">
+                    <h3>Non-Linearly Separable (e.g., XOR)</h3>
+                    <div class="small-plot-container" id="xor-separable-plot"></div>
+                    <p>No single straight line <strong>can</strong> separate the classes (e.g., purple from orange).</p>
+                </div>
+            </div>
+            <div class="explanation">
+                <p>A single perceptron can only create a single linear decision boundary. Therefore, it can only solve problems that are <strong>linearly separable</strong>.</p>
+            </div>
+        </div>
+
+        <div class="card">
+             <h2>The Challenge: XOR with a Single Perceptron</h2>
+            <div class="flex-container">
+                <div class="controls">
+                    <h3>Try to Separate XOR Manually</h3>
+                    <label for="xor-weight1">Weight 1 (w1):</label>
+                    <input type="range" id="xor-weight1" min="-5" max="5" value="1" step="0.1"> <span id="xor-weight1-value">1.0</span><br><br>
+                    <label for="xor-weight2">Weight 2 (w2):</label>
+                    <input type="range" id="xor-weight2" min="-5" max="5" value="1" step="0.1"> <span id="xor-weight2-value">1.0</span><br><br>
+                    <label for="xor-bias">Bias (b):</label>
+                    <input type="range" id="xor-bias" min="-5" max="5" value="0" step="0.1"> <span id="xor-bias-value">0.0</span><br><br>
+                    <div class="explanation">
+                         <p>Adjust the sliders. Can you find a single line (decision boundary) that correctly classifies all four XOR points?</p>
+                         <p>(Spoiler: You can't! This demonstrates the limitation.)</p>
+                         <div id="xor-perceptron-result" style="margin-top: 15px; font-weight: bold; font-size: 0.9em; line-height: 1.5;"></div>
+                     </div>
+                </div>
+                <div class="plot-container" id="xor-perceptron-plot"></div>
+             </div>
+        </div>
+
+         <div class="card">
+            <h2>The Solution: Multilayer Perceptron (MLP) for XOR</h2>
+            <div class="explanation">
+                <p>To solve non-linearly separable problems like XOR, we need more power. A Multilayer Perceptron (MLP) adds one or more "hidden layers" between the input and output.</p>
+                <p>These hidden layers learn intermediate representations, transforming the data into a space where it *becomes* linearly separable for the final output layer.</p>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 20px;">
+                 <button id="animate-mlp">Visualize MLP Concept</button>
+            </div>
+
+            <div id="mlp-visualization-area">
+                 <div id="mlp-diagram-container">
+                     </div>
+                 <div id="mlp-solution-plot-container" style="display: none;">
+                      </div>
+            </div>
+
+            <div class="explanation">
+                <p>The visualization above first shows a typical MLP structure. When animated, it conceptually shows data passing through input, hidden, and output layers. Afterwards, it displays a plot illustrating how an MLP can solve XOR by using its hidden layers to create multiple boundaries, effectively partitioning the space.</p>
+             </div>
+        </div>
+
+    </div> <script>
+        // --- Helper Functions ---
+        function sigmoid(x) {
+             const clampedX = Math.max(-700, Math.min(700, x));
+            return 1 / (1 + Math.exp(-clampedX));
+        }
+
+        
+        function predict(inputs, weights, bias) {
+            if (inputs.length !== weights.length) {
+                console.error("Input and weight dimensions must match");
+                return NaN;
+            }
+            const weightedSum = inputs.reduce((sum, input, i) => sum + input * weights[i], 0) + bias;
+            return sigmoid(weightedSum) >= 0.5 ? 1 : 0; 
+        }
+
+         
+         function predictTf(inputTensor, weightsTensor, biasTensor) {
+             return inputTensor.matMul(weightsTensor).add(biasTensor).sigmoid();
+         }
+
+        function calculateMSE(predictions, labels) {
+            const errors = predictions.map((pred, i) => Math.pow(labels[i] - pred, 2));
+            return errors.reduce((sum, error) => sum + error, 0) / errors.length;
+        }
+
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+
+        
+         const commonLayout = {
+             xaxis: { range: [-1.5, 1.5], title: 'Input 1 (x1)' , zeroline: true, zerolinewidth: 2, zerolinecolor: '#ccc'},
+             yaxis: { range: [-1.5, 1.5], title: 'Input 2 (x2)' , zeroline: true, zerolinewidth: 2, zerolinecolor: '#ccc'},
+             margin: { l: 50, r: 20, t: 50, b: 50 },
+             legend: { x: 0.01, y: 0.99 } 
+         };
+
+         const xorDataPoints = [
+             {x: -1, y: -1, label: 0}, 
+             {x: -1, y: 1, label: 1},  
+             {x: 1, y: -1, label: 1}, 
+             {x: 1, y: 1, label: 0}   
+         ];
+          const xorTraceBase = {
+             x: xorDataPoints.map(d => d.x),
+             y: xorDataPoints.map(d => d.y),
+             mode: 'markers',
+             marker: {
+                 size: 14, // Slightly larger markers
+                 color: xorDataPoints.map(d => d.label === 1 ? '#6a0dad' : '#ff7f50'), // Purple / Coral
+                 symbol: xorDataPoints.map(d => d.label === 1 ? 'circle' : 'square'),
+                 line: { width: 1, color: '#333'}
+            },
+             name: 'XOR Data'
+         };
+
+         const andDataPoints = [
+            {x: -1, y: -1, label: 0}, 
+            {x: -1, y: 1, label: 0},  
+            {x: 1, y: -1, label: 0},  
+            {x: 1, y: 1, label: 1}   
+         ];
+         const andTraceBase = {
+             x: andDataPoints.map(d => d.x),
+             y: andDataPoints.map(d => d.y),
+             mode: 'markers',
+             marker: {
+                 size: 14,
+                 color: andDataPoints.map(d => d.label === 1 ? '#28a745' : '#6c757d'), // Green / Gray
+                 symbol: andDataPoints.map(d => d.label === 1 ? 'circle' : 'square'),
+                 line: { width: 1, color: '#333'}
+            },
+             name: 'AND Data'
+         };
+
+
+        // --- Decision Boundary Plot ---
+        const weight1Slider = document.getElementById('weight1');
+        const weight2Slider = document.getElementById('weight2');
+        const biasSlider = document.getElementById('bias');
+        const weight1ValueSpan = document.getElementById('weight1-value');
+        const weight2ValueSpan = document.getElementById('weight2-value');
+        const biasValueSpan = document.getElementById('bias-value');
+        const decisionBoundaryPlotDiv = document.getElementById('decision-boundary-plot');
+
+        function plotDecisionBoundary(w1, w2, b) {
+             const xRange = [-2, 2]; 
+             let yRange = [0, 0];
+             let boundaryTrace = {};
+
+             // Handle vertical line case (w2 approximately zero)
+             if (Math.abs(w2) < 1e-6) {
+                 if (Math.abs(w1) > 1e-6) {
+                    const x_intercept = -b / w1;
+                    boundaryTrace = {
+                        x: [x_intercept, x_intercept],
+                        y: xRange, // Plot vertical line across y-range
+                        mode: 'lines',
+                        name: 'Decision Boundary',
+                        line: { color: '#007bff', width: 3 }
+                    };
+                 } else {
+                     // If w1 and w2 are zero, no meaningful boundary
+                     boundaryTrace = { x: [], y: [], mode: 'lines', name: 'Decision Boundary (Invalid)'};
+                 }
+             } else {
+                 // Calculate y values for the line w1*x + w2*y + b = 0 => y = (-w1*x - b) / w2
+                 yRange = xRange.map(x => (-w1 * x - b) / w2);
+                 boundaryTrace = {
+                    x: xRange,
+                    y: yRange,
+                    mode: 'lines',
+                    name: 'Decision Boundary',
+                    line: { color: '#007bff', width: 3 }
+                 };
+             }
+
+             // Create a copy of the base AND trace
+             const currentAndTrace = JSON.parse(JSON.stringify(andTraceBase));
+
+             const layout = {
+                 ...commonLayout, // Spread common layout properties
+                 title: 'Perceptron Decision Boundary (AND Data)',
+                 xaxis: {...commonLayout.xaxis, range: [-1.5, 1.5]}, // Reset ranges for display
+                 yaxis: {...commonLayout.yaxis, range: [-1.5, 1.5]},
+             };
+
+             Plotly.react(decisionBoundaryPlotDiv, [currentAndTrace, boundaryTrace], layout); // Use react for smoother updates
+        }
+
+        function updateDecisionBoundaryPlot() {
+            const w1 = parseFloat(weight1Slider.value);
+            const w2 = parseFloat(weight2Slider.value);
+            const b = parseFloat(biasSlider.value);
+            weight1ValueSpan.textContent = w1.toFixed(1);
+            weight2ValueSpan.textContent = w2.toFixed(1);
+            biasValueSpan.textContent = b.toFixed(1);
+            plotDecisionBoundary(w1, w2, b);
+        }
+
+        // Use debounce to avoid excessive updates while sliding
+        const debouncedUpdateDecisionBoundary = debounce(updateDecisionBoundaryPlot, 50);
+
+        weight1Slider.addEventListener('input', debouncedUpdateDecisionBoundary);
+        weight2Slider.addEventListener('input', debouncedUpdateDecisionBoundary);
+        biasSlider.addEventListener('input', debouncedUpdateDecisionBoundary);
+
+        updateDecisionBoundaryPlot(); // Initial plot
+
+        // --- Error Surface Plot ---
+        const errorSurfacePlotDiv = document.getElementById('error-surface-plot');
+        const errorBiasSlider = document.getElementById('error-bias');
+        const errorBiasValueSpan = document.getElementById('error-bias-value');
+        let errorSurfaceDataCache = {}; // Cache results for bias values
+
+        async function plotErrorSurface(bias) {
+            const biasKey = bias.toFixed(1); // Use fixed precision for cache key
+            if (errorSurfaceDataCache[biasKey]) {
+                 Plotly.react(errorSurfacePlotDiv, errorSurfaceDataCache[biasKey].data, errorSurfaceDataCache[biasKey].layout);
+                 return; // Use cached data
+            }
+
+
+            const resolution = 25; 
+            const wRange = tf.linspace(-4, 4, resolution); 
+            const w1Range = await wRange.array();
+            const w2Range = await wRange.array();
+            const errors = [];
+
+            // Prepare AND data tensors
+            const andInputTensor = tf.tensor2d(andDataPoints.map(p => [p.x, p.y]));
+            const andLabelTensor = tf.tensor1d(andDataPoints.map(p => p.label));
+            const biasTensor = tf.scalar(bias);
+
+            for (const w1 of w1Range) {
+                const errorRow = [];
+                for (const w2 of w2Range) {
+                     // Use TensorFlow for prediction
+                     const weightsTensor = tf.tensor2d([[w1], [w2]]); // Shape [2, 1] for matMul
+                     const predTensor = predictTf(andInputTensor, weightsTensor, biasTensor);
+                     // Calculate MSE using tf.losses or manually after getting predictions
+                     const predictions = await predTensor.array(); // Get predictions as array
+                     const mse = tf.losses.meanSquaredError(andLabelTensor, tf.tensor1d(predictions.flat()).round()).dataSync()[0]; // Use tf MSE
+                    errorRow.push(mse);
+                }
+                errors.push(errorRow);
+            }
+             wRange.dispose(); // Dispose tensor
+             andInputTensor.dispose();
+             andLabelTensor.dispose();
+             biasTensor.dispose();
+
+
+            const data = [{
+                x: w1Range,
+                y: w2Range,
+                z: errors,
+                type: 'surface',
+                colorscale: 'Viridis' 
+            }];
+
+            const layout = {
+                title: `Error Surface for AND (Bias = ${bias.toFixed(1)})`,
+                 autosize: true, 
+                scene: {
+                    xaxis: { title: 'Weight 1 (w1)', range: [-4, 4], backgroundcolor: "rgb(230, 230,230)" },
+                    yaxis: { title: 'Weight 2 (w2)', range: [-4, 4], backgroundcolor: "rgb(230, 230,230)" },
+                    zaxis: { title: 'Mean Squared Error', backgroundcolor: "rgb(230, 230,230)" },
+                     camera: { eye: { x: 1.8, y: 1.8, z: 0.8 } } // Adjust camera angle
+                },
+                margin: { l: 0, r: 0, t: 40, b: 0 } // Reduce margins for 3D plot
+            };
+
+             // Cache the result
+             errorSurfaceDataCache[biasKey] = { data, layout };
+
+            Plotly.react(errorSurfacePlotDiv, data, layout);
+        }
+
+        async function updateErrorSurfacePlot() {
+            const bias = parseFloat(errorBiasSlider.value);
+            errorBiasValueSpan.textContent = bias.toFixed(1);
+            errorBiasSlider.disabled = true;
+            await plotErrorSurface(bias);
+            errorBiasSlider.disabled = false;
+        }
+
+         const debouncedUpdateErrorSurface = debounce(updateErrorSurfacePlot, 200); 
+
+        errorBiasSlider.addEventListener('input', debouncedUpdateErrorSurface);
+        updateErrorSurfacePlot(); // Initial plot
+
+        const andPlotDiv = document.getElementById('and-plot');
+        const xorSeparablePlotDiv = document.getElementById('xor-separable-plot');
+
+        function plotLinearSeparability() {
+             const andLayout = {
+                 ...commonLayout,
+                 title: 'AND Gate (Separable)',
+                 xaxis: {...commonLayout.xaxis, range: [-1.5, 1.5]},
+                 yaxis: {...commonLayout.yaxis, range: [-1.5, 1.5]},
+                 margin: { l: 40, r: 10, t: 40, b: 40 } // Smaller margins
+             };
+             Plotly.newPlot(andPlotDiv, [andTraceBase], andLayout);
+
+             const xorLayoutSeparable = {
+                ...commonLayout,
+                title: 'XOR Gate (Not Separable)',
+                 xaxis: {...commonLayout.xaxis, range: [-1.5, 1.5]},
+                 yaxis: {...commonLayout.yaxis, range: [-1.5, 1.5]},
+                 margin: { l: 40, r: 10, t: 40, b: 40 } // Smaller margins
+            };
+            Plotly.newPlot(xorSeparablePlotDiv, [xorTraceBase], xorLayoutSeparable);
+        }
+
+        plotLinearSeparability();
+
+        const xorWeight1Slider = document.getElementById('xor-weight1');
+        const xorWeight2Slider = document.getElementById('xor-weight2');
+        const xorBiasSlider = document.getElementById('xor-bias');
+        const xorWeight1ValueSpan = document.getElementById('xor-weight1-value');
+        const xorWeight2ValueSpan = document.getElementById('xor-weight2-value');
+        const xorBiasValueSpan = document.getElementById('xor-bias-value');
+        const xorPerceptronPlotDiv = document.getElementById('xor-perceptron-plot');
+        const xorPerceptronResultP = document.getElementById('xor-perceptron-result');
+
+        function plotXORPerceptronBoundary(w1, w2, b) {
+             const xRange = [-2, 2];
+             let yRange = [0, 0];
+             let boundaryTrace = {};
+
+             // Handle vertical line case
+             if (Math.abs(w2) < 1e-6) {
+                  if (Math.abs(w1) > 1e-6) {
+                     const x_intercept = -b / w1;
+                     boundaryTrace = {
+                         x: [x_intercept, x_intercept], y: xRange, mode: 'lines', name: 'Decision Boundary', line: { color: '#dc3545', width: 3, dash: 'dash' } // Dashed red line
+                     };
+                  } else {
+                       boundaryTrace = { x: [], y: [], mode: 'lines', name: 'Decision Boundary (Invalid)'};
+                  }
+             } else {
+                 yRange = xRange.map(x => (-w1 * x - b) / w2);
+                 boundaryTrace = {
+                     x: xRange, y: yRange, mode: 'lines', name: 'Decision Boundary', line: { color: '#dc3545', width: 3, dash: 'dash' } // Dashed red line
+                 };
+             }
+
+              const currentXorTrace = JSON.parse(JSON.stringify(xorTraceBase));
+
+             const layout = {
+                 ...commonLayout,
+                 title: 'Single Perceptron Trying to Learn XOR',
+                 xaxis: {...commonLayout.xaxis, range: [-1.5, 1.5]},
+                 yaxis: {...commonLayout.yaxis, range: [-1.5, 1.5]},
+             };
+
+             Plotly.react(xorPerceptronPlotDiv, [currentXorTrace, boundaryTrace], layout);
+
+             let resultsText = "Current Predictions:<br>";
+             let correctCount = 0;
+             xorDataPoints.forEach(point => {
+                 const prediction = predict([point.x, point.y], [w1, w2], b);
+                 const isCorrect = prediction === point.label;
+                 if (isCorrect) correctCount++;
+                 resultsText += `(${point.x}, ${point.y}) -> Pred: ${prediction}, Actual: ${point.label} ${isCorrect ? '✅' : '❌'}<br>`;
+             });
+             resultsText += `Correct: ${correctCount} / ${xorDataPoints.length}`;
+             xorPerceptronResultP.innerHTML = resultsText;
+        }
+
+        function updateXORPerceptronPlot() {
+            const w1 = parseFloat(xorWeight1Slider.value);
+            const w2 = parseFloat(xorWeight2Slider.value);
+            const b = parseFloat(xorBiasSlider.value);
+            xorWeight1ValueSpan.textContent = w1.toFixed(1);
+            xorWeight2ValueSpan.textContent = w2.toFixed(1);
+            xorBiasValueSpan.textContent = b.toFixed(1);
+            plotXORPerceptronBoundary(w1, w2, b);
+        }
+
+         const debouncedUpdateXORPerceptron = debounce(updateXORPerceptronPlot, 50);
+
+        xorWeight1Slider.addEventListener('input', debouncedUpdateXORPerceptron);
+        xorWeight2Slider.addEventListener('input', debouncedUpdateXORPerceptron);
+        xorBiasSlider.addEventListener('input', debouncedUpdateXORPerceptron);
+
+        updateXORPerceptronPlot(); 
+
+        const mlpVisualizationArea = document.getElementById('mlp-visualization-area');
+        const mlpDiagramContainer = document.getElementById('mlp-diagram-container');
+        const mlpSolutionPlotContainer = document.getElementById('mlp-solution-plot-container');
+        const animateMLPButton = document.getElementById('animate-mlp');
+        let currentAnimationTimeout = null; 
+
+        function createNeuron(id, x, y, text = '') {
+            const neuron = document.createElement('div');
+            neuron.classList.add('mlp-neuron');
+            neuron.id = id;
+            neuron.style.left = `${x}%`;
+            neuron.style.top = `${y}%`;
+            neuron.style.transform = 'translate(-50%, -50%)'; 
+            neuron.textContent = text;
+             neuron.dataset.baseText = text; 
+            mlpDiagramContainer.appendChild(neuron);
+            return neuron;
+        }
+
+        function createArrow(id, fromNeuron, toNeuron) {
+            const arrow = document.createElement('div');
+            arrow.classList.add('mlp-arrow');
+            arrow.id = id;
+            mlpDiagramContainer.appendChild(arrow);
+
+            function updateArrow() {
+                 // Get positions relative to the container
+                 const containerRect = mlpDiagramContainer.getBoundingClientRect();
+                 if (containerRect.width === 0 || containerRect.height === 0) return; 
+
+                 const fromRect = fromNeuron.getBoundingClientRect();
+                 const toRect = toNeuron.getBoundingClientRect();
+
+                 const fromX = (fromRect.left + fromRect.width / 2) - containerRect.left;
+                 const fromY = (fromRect.top + fromRect.height / 2) - containerRect.top;
+                 const toX = (toRect.left + toRect.width / 2) - containerRect.left;
+                 const toY = (toRect.top + toRect.height / 2) - containerRect.top;
+
+                 const dx = toX - fromX;
+                 const dy = toY - fromY;
+                 const distance = Math.sqrt(dx*dx + dy*dy);
+                 const angle = Math.atan2(dy, dx); // Angle in radians
+
+                 const neuronRadius = fromRect.width / 2; // Approx radius
+
+                arrow.style.width = `${Math.max(0, distance - neuronRadius * 1.8)}px`; 
+                arrow.style.left = `${fromX + neuronRadius * Math.cos(angle)}px`;
+                arrow.style.top = `${fromY + neuronRadius * Math.sin(angle)}px`; 
+                arrow.style.transform = `rotate(${angle}rad)`;
+            }
+
+            // Use ResizeObserver to update arrows if container size changes
+            const resizeObserver = new ResizeObserver(updateArrow);
+            resizeObserver.observe(mlpDiagramContainer);
+
+            updateArrow();
+            return { element: arrow, update: updateArrow, observer: resizeObserver }; // Return observer to disconnect later
+        }
+
+         let arrowUpdaters = []; // Store arrow update functions and observers
+         function drawMLPDiagram() {
+             mlpDiagramContainer.innerHTML = ''; // Clear previous elements
+             arrowUpdaters.forEach(item => item.observer.disconnect()); // Disconnect old observers
+             arrowUpdaters = []; // Clear the list
+
+             const inputY1 = 25, inputY2 = 75;
+             const hiddenY1 = 35, hiddenY2 = 65;
+             const outputY = 50;
+             const inputX = 15, hiddenX = 50, outputX = 85;
+
+             const input1 = createNeuron('in1', inputX, inputY1, 'x1');
+             const input2 = createNeuron('in2', inputX, inputY2, 'x2');
+             const hidden1 = createNeuron('hid1', hiddenX, hiddenY1, 'h1');
+             const hidden2 = createNeuron('hid2', hiddenX, hiddenY2, 'h2');
+             const output = createNeuron('out', outputX, outputY, 'y');
+
+             arrowUpdaters.push(createArrow('arr_i1_h1', input1, hidden1));
+             arrowUpdaters.push(createArrow('arr_i1_h2', input1, hidden2));
+             arrowUpdaters.push(createArrow('arr_i2_h1', input2, hidden1));
+             arrowUpdaters.push(createArrow('arr_i2_h2', input2, hidden2));
+             arrowUpdaters.push(createArrow('arr_h1_o', hidden1, output));
+             arrowUpdaters.push(createArrow('arr_h2_o', hidden2, output));
+
+             requestAnimationFrame(() => {
+                  arrowUpdaters.forEach(item => item.update());
+             });
+         }
+
+
+        function showMLPSolutionPlot() {
+             mlpDiagramContainer.style.display = 'none';
+             mlpSolutionPlotContainer.style.display = 'block';
+             mlpSolutionPlotContainer.innerHTML = ''; // Clear previous plot
+
+             // 1. Plot XOR data points
+             const finalXorTrace = JSON.parse(JSON.stringify(xorTraceBase));
+             finalXorTrace.name = 'XOR Data'; 
+
+              const xLine = [-1.5, 1.5];
+              const yLine1 = xLine.map(x => x + 0.0); 
+              const yLine2 = xLine.map(x => -x + 0.0); 
+
+              const traceLine1 = {
+                  x: xLine, y: yLine1, mode: 'lines', name: 'Hidden Boundary 1',
+                  line: { color: 'rgba(0, 123, 255, 0.7)', width: 2, dash: 'dot'}
+              };
+              const traceLine2 = {
+                  x: xLine, y: yLine2, mode: 'lines', name: 'Hidden Boundary 2',
+                  line: { color: 'rgba(255, 193, 7, 0.7)', width: 2, dash: 'dot'}
+              };
+
+              // 3. Define layout
+              const layout = {
+                  ...commonLayout,
+                  title: 'How an MLP Can Separate XOR',
+                  xaxis: {...commonLayout.xaxis, range: [-1.5, 1.5]},
+                  yaxis: {...commonLayout.yaxis, range: [-1.5, 1.5]},
+                  annotations: [{ // Add text explanation on plot
+                      x: 0, y: 1.4, xref: 'paper', yref: 'y',
+                      text: 'MLP uses hidden layers (like these lines) to create separable regions',
+                      showarrow: false, font: { size: 10 }
+                  }],
+                  legend: { x: 0.01, y: 0.99 }
+              };
+
+              // 4. Plot
+              Plotly.newPlot(mlpSolutionPlotContainer, [finalXorTrace, traceLine1, traceLine2], layout);
+        }
+
+
+        function animateMLPConceptual() {
+             if (currentAnimationTimeout) {
+                 clearTimeout(currentAnimationTimeout);
+                 currentAnimationTimeout = null;
+             }
+             mlpDiagramContainer.querySelectorAll('.mlp-neuron, .mlp-arrow').forEach(el => el.classList.remove('active'));
+
+             mlpSolutionPlotContainer.style.display = 'none';
+             mlpDiagramContainer.style.display = 'block';
+             drawMLPDiagram(); 
+
+             const neurons = ['in1', 'in2', 'hid1', 'hid2', 'out'];
+             const arrows = [
+                 ['arr_i1_h1', 'arr_i1_h2', 'arr_i2_h1', 'arr_i2_h2'], 
+                 ['arr_h1_o', 'arr_h2_o']                            
+             ];
+
+             function setActive(elements, active) {
+                 elements.forEach(id => {
+                     const el = document.getElementById(id);
+                     if (el) {
+                         if (active) el.classList.add('active');
+                         else el.classList.remove('active');
+                     }
+                 });
+             }
+
+             let delay = 0;
+             const stepDuration = 600; 
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(['in1', 'in2'], true);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(['in1', 'in2'], false);
+                 setActive(arrows[0], true);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(arrows[0], false);
+                 setActive(['hid1', 'hid2'], true);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(['hid1', 'hid2'], false);
+                 setActive(arrows[1], true);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(arrows[1], false);
+                 setActive(['out'], true);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 setActive(['out'], false);
+             }, delay);
+             delay += stepDuration;
+
+             currentAnimationTimeout = setTimeout(() => {
+                 showMLPSolutionPlot();
+                 currentAnimationTimeout = null; 
+             }, delay);
+        }
+
+        animateMLPButton.addEventListener('click', animateMLPConceptual);
+
+        drawMLPDiagram();
+
+         window.addEventListener('resize', debounce(() => {
+             if (mlpDiagramContainer.style.display !== 'none') {
+                 drawMLPDiagram(); 
+             }
+             if (mlpSolutionPlotContainer.style.display !== 'none') {
+                  
+             }
+         }, 250));
+
+    </script>
+</body>
+</html>
